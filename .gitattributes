@@ -1,3 +1,4 @@
-templates/*.html linguist-vendored
-static/*.css linguist-vendored
-static/*.js linguist-vendored
+.gitattributes
+*.html linguist-detectable=false
+*.css linguist-detectable=false
+*.js linguist-detectable=false
