@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-zinc-950 text-white">
+<head>
+    <meta charset="UTF-8">
+    <title>SPYSHIELD X - Threat Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; }
+        .card { background: #111827; border: 1px solid #374151; }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden">
+
+    <!-- Sidebar -->
+    <div class="w-64 bg-zinc-900 border-r border-zinc-800 p-4 flex flex-col">
+        <div class="flex items-center gap-3 mb-8">
+            <div class="w-9 h-9 bg-cyan-500 rounded-xl flex items-center justify-center text-xl font-bold">S</div>
+            <div>
+                <h1 class="text-2xl font-bold tracking-tighter">SPYSHIELD X</h1>
+                <p class="text-xs text-zinc-400">Threat Detection v2.4</p>
+            </div>
+        </div>
+        <div class="space-y-1">
+            <a href="#" onclick="showDashboard()" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium bg-cyan-600">
+                <i class="fas fa-tachometer-alt"></i> Dashboard
+            </a>
+            <a href="#" onclick="showProcessMonitor()" class="flex items-center gap-3 px-4 py-3 hover:bg-zinc-800 rounded-xl text-sm">
+                <i class="fas fa-tasks"></i> Process Monitor
+            </a>
+            <a href="#" onclick="showNetwork()" class="flex items-center gap-3 px-4 py-3 hover:bg-zinc-800 rounded-xl text-sm">
+                <i class="fas fa-globe"></i> Network Monitor
+            </a>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-1 overflow-auto" id="main-content">
+
+        <!-- Dashboard -->
+        <div id="dashboard-page">
+            <div class="border-b border-zinc-800 bg-zinc-900 px-8 py-4 flex items-center justify-between">
+                <h2 class="text-2xl font-semibold">Threat Dashboard</h2>
+                <div class="flex gap-3">
+                    <button onclick="triggerFullScan()" class="bg-cyan-500 hover:bg-cyan-600 px-6 py-2.5 rounded-2xl font-semibold">SCAN NOW</button>
+                    <button onclick="uploadFile()" class="bg-zinc-700 hover:bg-zinc-600 px-6 py-2.5 rounded-2xl font-semibold flex items-center gap-2">
+                        <i class="fas fa-upload"></i> Upload File
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-4 gap-4 p-8" id="stats-cards"></div>
+
+            <div class="grid grid-cols-7 gap-4 px-8">
+                <div class="col-span-4 card rounded-3xl p-6">
+                    <h3 class="font-semibold flex items-center gap-2 mb-4"><i class="fas fa-bolt text-yellow-400"></i> ACTIVE THREAT LOG</h3>
+                    <table class="w-full" id="threat-table">
+                        <thead>
+                            <tr class="text-xs text-zinc-400 border-b">
+                                <th class="py-3 text-left">THREAT NAME</th>
+                                <th>PLATFORM</th>
+                                <th>TYPE</th>
+                                <th>STATUS</th>
+                                <th>REASON</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+
+                <div class="col-span-3 card rounded-3xl p-6">
+                    <h3 class="font-semibold mb-4"><i class="fas fa-shield-alt"></i> THREAT LEVEL</h3>
+                    <canvas id="gauge" width="280" height="160"></canvas>
+                    <div class="text-center -mt-8">
+                        <div id="gauge-value" class="text-6xl font-bold text-orange-400">28</div>
+                        <div class="text-xs text-orange-400">LOW RISK</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Process Monitor -->
+        <div id="process-page" style="display:none; padding:32px;">
+            <div class="card rounded-3xl p-6">
+                <h3 class="font-semibold mb-4"><i class="fas fa-tasks"></i> PROCESS MONITOR</h3>
+                <div id="process-content">Loading processes...</div>
+            </div>
+        </div>
+
+        <!-- Network Monitor -->
+        <div id="network-page" style="display:none; padding:32px;">
+            <div class="card rounded-3xl p-6">
+                <h3 class="font-semibold mb-4"><i class="fas fa-globe"></i> NETWORK MONITOR</h3>
+                <div class="text-5xl font-bold text-cyan-400 mb-2" id="active-connections">0</div>
+                <p class="text-zinc-400">Active Connections</p>
+                <button onclick="loadNetwork()" class="mt-6 bg-zinc-800 hover:bg-zinc-700 px-5 py-2 rounded-xl">Refresh Network</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let gaugeChart;
+
+        function createGauge(value) {
+            const ctx = document.getElementById('gauge');
+            if (gaugeChart) gaugeChart.destroy();
+            gaugeChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: { datasets: [{ data: [value, 100-value], backgroundColor: ['#f59e0b', '#27272a'], borderWidth: 0, circumference: 180, rotation: -90 }] },
+                options: { cutout: '85%', plugins: { legend: {display: false} } }
+            });
+        }
+
+        function loadStats() {
+            fetch('/api/stats').then(r => r.json()).then(d => {
+                d.protection_score = Math.max(50, 100 - (d.threats_detected * 4));
+
+                document.getElementById('stats-cards').innerHTML = `
+                    <div class="card rounded-3xl p-6"><div class="text-red-500 text-5xl font-bold">${d.threats_detected}</div><div class="text-xs text-zinc-400">THREATS DETECTED</div></div>
+                    <div class="card rounded-3xl p-6"><div class="text-yellow-400 text-5xl font-bold">${d.quarantined}</div><div class="text-xs text-zinc-400">QUARANTINED</div></div>
+                    <div class="card rounded-3xl p-6"><div class="text-emerald-400 text-5xl font-bold">${d.files_scanned}</div><div class="text-xs text-zinc-400">FILES SCANNED</div></div>
+                    <div class="card rounded-3xl p-6"><div class="text-cyan-400 text-5xl font-bold">${d.protection_score}</div><div class="text-xs text-zinc-400">PROTECTION SCORE</div></div>
+                `;
+
+                let tbody = document.querySelector('#threat-table tbody');
+                tbody.innerHTML = '';
+                d.threat_log.forEach(t => {
+                    tbody.innerHTML += `<tr class="border-b">
+                        <td class="py-4">${t.name}</td>
+                        <td><span class="px-3 py-1 text-xs rounded-full bg-blue-500">${t.platform}</span></td>
+                        <td>${t.type}</td>
+                        <td><span class="bg-red-500 text-white text-xs px-3 py-1 rounded-full">${t.status}</span></td>
+                        <td class="text-xs text-zinc-300">${t.reason || 'Detected'}</td>
+                    </tr>`;
+                });
+
+                document.getElementById('gauge-value').textContent = d.threat_level || 28;
+                createGauge(d.threat_level || 28);
+            });
+        }
+
+        // Cyber Style Loading Bar
+        function showLoadingBar(filename) {
+            const loadingHTML = `
+                <div id="scan-loading" class="fixed inset-0 bg-black bg-opacity-95 flex items-center justify-center z-50 font-mono">
+                    <div class="bg-zinc-950 border border-cyan-500/30 rounded-3xl p-8 w-full max-w-md">
+                        <div class="flex justify-between mb-6">
+                            <div class="flex items-center gap-3">
+                                <div class="w-5 h-5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
+                                <span class="text-cyan-400 font-bold tracking-widest">SPYSHIELD SCAN</span>
+                            </div>
+                            <span class="text-red-500 text-sm animate-pulse">LIVE</span>
+                        </div>
+                        <div class="text-white mb-1">Scanning: <span class="text-cyan-300">${filename}</span></div>
+                        <div class="h-2.5 bg-zinc-900 rounded-full overflow-hidden mb-3 border border-cyan-900">
+                            <div id="progress-bar" class="h-full bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 w-0 transition-all duration-150"></div>
+                        </div>
+                        <div id="progress-text" class="text-cyan-400 text-sm mb-4">0% • Initializing...</div>
+                    </div>
+                </div>`;
+            document.body.insertAdjacentHTML('beforeend', loadingHTML);
+
+            let progress = 0;
+            window.scanInterval = setInterval(() => {
+                progress += Math.random() * 12 + 6;
+                if (progress > 97) progress = 97;
+                document.getElementById('progress-bar').style.width = progress + '%';
+                document.getElementById('progress-text').textContent = Math.floor(progress) + '% • Analyzing...';
+            }, 150);
+        }
+
+        function hideLoadingBar() {
+            const bar = document.getElementById('progress-bar');
+            const text = document.getElementById('progress-text');
+            if (bar) bar.style.width = '100%';
+            if (text) text.textContent = '100% • Complete';
+            setTimeout(() => {
+                const loading = document.getElementById('scan-loading');
+                if (loading) loading.remove();
+                if (window.scanInterval) clearInterval(window.scanInterval);
+            }, 700);
+        }
+
+        function uploadFile() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.onchange = e => {
+                const file = e.target.files[0];
+                if (!file) return;
+                showLoadingBar(file.name);
+                const form = new FormData();
+                form.append('file', file);
+                fetch('/api/scan', { method: 'POST', body: form })
+                .then(r => r.json())
+                .then(res => {
+                    hideLoadingBar();
+                    alert(res.message || res.status);
+                    loadStats();
+                })
+                .catch(() => { hideLoadingBar(); alert("Scan error"); });
+            };
+            input.click();
+        }
+
+        function loadProcessMonitor() {
+            fetch('/api/processes')
+            .then(r => r.json())
+            .then(data => {
+                let html = `<table class="w-full"><thead><tr class="text-xs text-zinc-400 border-b"><th class="py-3 text-left">PROCESS NAME</th><th>PID</th><th>CPU %</th><th>MEM %</th><th>RISK SCORE</th><th>STATUS</th></tr></thead><tbody>`;
+                data.processes.forEach(p => {
+                    html += `<tr class="border-b hover:bg-zinc-800">
+                        <td class="py-3">${p.name}</td>
+                        <td>${p.pid}</td>
+                        <td>${p.cpu}</td>
+                        <td>${p.memory}</td>
+                        <td class="font-bold ${p.color}">${p.risk_score}</td>
+                        <td><span class="px-3 py-1 text-xs rounded-full ${p.color === 'red' ? 'bg-red-500/20 text-red-400' : p.color === 'yellow' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-emerald-500/20 text-emerald-400'}">${p.risk_level}</span></td>
+                    </tr>`;
+                });
+                html += `</tbody></table>`;
+                document.getElementById('process-content').innerHTML = html;
+            });
+        }
+
+        function loadNetwork() {
+            fetch('/api/network').then(r => r.json()).then(d => {
+                document.getElementById('active-connections').textContent = d.active_connections || 0;
+            });
+        }
+
+        function showDashboard() {
+            document.getElementById('dashboard-page').style.display = 'block';
+            document.getElementById('process-page').style.display = 'none';
+            document.getElementById('network-page').style.display = 'none';
+            document.querySelectorAll('a').forEach(a => a.classList.remove('bg-cyan-600'));
+            document.querySelector('a[onclick="showDashboard()"]').classList.add('bg-cyan-600');
+        }
+
+        function showProcessMonitor() {
+            document.getElementById('dashboard-page').style.display = 'none';
+            document.getElementById('process-page').style.display = 'block';
+            document.getElementById('network-page').style.display = 'none';
+            document.querySelectorAll('a').forEach(a => a.classList.remove('bg-cyan-600'));
+            document.querySelector('a[onclick="showProcessMonitor()"]').classList.add('bg-cyan-600');
+            loadProcessMonitor();
+        }
+
+        function showNetwork() {
+            document.getElementById('dashboard-page').style.display = 'none';
+            document.getElementById('process-page').style.display = 'none';
+            document.getElementById('network-page').style.display = 'block';
+            document.querySelectorAll('a').forEach(a => a.classList.remove('bg-cyan-600'));
+            document.querySelector('a[onclick="showNetwork()"]').classList.add('bg-cyan-600');
+            loadNetwork();
+        }
+
+        function triggerFullScan() {
+            alert("Real-time monitoring is active.");
+            loadStats();
+        }
+
+        setInterval(loadStats, 5000);
+
+        window.onload = () => {
+            loadStats();
+            createGauge(28);
+            showDashboard();
+        };
+    </script>
+</body>
+</html>
