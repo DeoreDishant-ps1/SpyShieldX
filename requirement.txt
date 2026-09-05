@@ -1,1 +1,5 @@
-
+Flask==3.0.3
+watchdog==4.0.1
+psutil==6.0.0
+yara-python==4.5.1
+Werkzeug==3.0.3
